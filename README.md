@@ -1,4 +1,6 @@
-# UptimeWatch - Professional Uptime Monitoring
+# example: https://uptime-psi-five.vercel.app/
+# username: admin
+# password: password 
 
 Aplikasi monitoring uptime website yang modern dan profesional dengan setup manual yang mudah.
 
