@@ -262,6 +262,14 @@ npm run build
 3. Klik **"Add custom domain"**
 4. Ikuti instruksi untuk setup DNS
 
+### 7. Test Aplikasi
+1. Buka aplikasi (local: `http://localhost:5173` atau URL production)
+2. Klik **Login** di navigation
+3. Login dengan:
+   - **Username:** `admin`
+   - **Password:** `password`
+4. Mulai tambahkan monitor!
+
 ## 🔧 Troubleshooting
 
 ### ❌ Error: "Environment Variables Diperlukan"
