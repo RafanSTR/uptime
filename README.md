@@ -196,107 +196,71 @@ VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
-#### Untuk Vercel:
+### 5. Deploy ke Vercel
+
+#### A. Persiapan
+1. Push project ke GitHub repository
+2. Pastikan semua file sudah ter-commit
+
+#### B. Deploy ke Vercel
 1. Buka [Vercel Dashboard](https://vercel.com/dashboard)
-2. Import repository GitHub Anda
-3. Di bagian **Environment Variables**, tambahkan:
+2. Klik **"New Project"**
+3. Import repository GitHub Anda
+4. **PENTING:** Di bagian **Environment Variables**, tambahkan:
    - **Name:** `VITE_SUPABASE_URL` **Value:** `https://your-project.supabase.co`
    - **Name:** `VITE_SUPABASE_ANON_KEY` **Value:** `your-anon-key`
-4. Klik **Deploy**
+5. Klik **Deploy**
+6. Tunggu deployment selesai
+7. Buka URL yang diberikan Vercel untuk test aplikasi
 
-#### Untuk Netlify:
-1. Buka [Netlify Dashboard](https://app.netlify.com)
-2. Drag & drop folder `dist` setelah build, atau connect GitHub
-3. Buka **Site Settings** → **Environment Variables**
-4. Tambahkan kedua environment variables seperti di atas
-5. Redeploy site
+#### C. Menghubungkan Domain Custom (Opsional)
+1. Di Vercel Dashboard, buka project Anda
+2. Klik tab **"Domains"**
+3. Tambahkan domain custom Anda
+4. Ikuti instruksi untuk setup DNS
 
-### 5. Test Aplikasi
-1. Buka aplikasi (local: `http://localhost:5173` atau URL production)
-2. Klik **Login** di navigation
-3. Login dengan:
-   - **Username:** `admin`
-   - **Password:** `password`
-4. Mulai tambahkan monitor!
+### 6. Deploy ke Netlify
 
-## 🌐 Deploy ke Vercel - Lengkap
-
-### Step 1: Persiapan
+#### A. Build Project Local
 ```bash
-# Clone atau download project
-git clone https://github.com/your-repo/uptime-monitor
-cd uptime-monitor
-
-# Install dependencies
 npm install
-
-# Test local (opsional)
-npm run dev
-```
-
-### Step 2: Setup Database
-1. Ikuti **Setup Database Manual** di atas
-2. Pastikan semua SQL berhasil dijalankan
-3. Catat Project URL dan anon key
-
-### Step 3: Deploy ke Vercel
-1. Push ke GitHub:
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
-```
-
-2. Buka [Vercel Dashboard](https://vercel.com/dashboard)
-3. Klik **"New Project"**
-4. Import repository GitHub
-5. **PENTING:** Di **Environment Variables**, tambahkan:
-```
-VITE_SUPABASE_URL = https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY = your-anon-key-here
-```
-6. Klik **Deploy**
-
-### Step 4: Verifikasi
-1. Tunggu deployment selesai
-2. Buka URL yang diberikan Vercel
-3. Test login dengan `admin` / `password`
-4. Tambahkan monitor pertama
-
-## 🌐 Deploy ke Netlify - Lengkap
-
-### Step 1: Build Project
-```bash
-# Install dependencies
-npm install
-
-# Build untuk production
 npm run build
 ```
 
-### Step 2: Deploy Manual (Drag & Drop)
+#### B. Deploy Manual (Drag & Drop)
 1. Buka [Netlify Dashboard](https://app.netlify.com)
 2. Drag & drop folder `dist` ke area deploy
 3. Tunggu upload selesai
 
-### Step 3: Setup Environment Variables
+#### C. Setup Environment Variables
 1. Buka **Site Settings** → **Environment Variables**
 2. Klik **Add Variable** dan tambahkan:
    - **Key:** `VITE_SUPABASE_URL` **Value:** `https://your-project.supabase.co`
    - **Key:** `VITE_SUPABASE_ANON_KEY` **Value:** `your-anon-key`
 3. Klik **Save**
 
-### Step 4: Redeploy
-1. Buka **Deploys** tab
-2. Klik **Trigger Deploy** → **Deploy Site**
-3. Tunggu deployment selesai
-
-### Step 5: Setup Redirects (Penting!)
-1. Buat file `public/_redirects` dengan isi:
+#### D. Setup Redirects (Penting!)
+1. Pastikan file `public/_redirects` ada dengan isi:
 ```
 /*    /index.html   200
 ```
-2. Redeploy lagi
+2. Redeploy dengan cara:
+   - Buka **Deploys** tab
+   - Klik **Trigger Deploy** → **Deploy Site**
+
+#### E. Menghubungkan GitHub (Opsional)
+1. Di Netlify Dashboard, klik **"New site from Git"**
+2. Connect ke GitHub dan pilih repository
+3. Set build command: `npm run build`
+4. Set publish directory: `dist`
+5. Tambahkan environment variables seperti langkah C
+6. Deploy
+
+#### F. Domain Custom di Netlify
+1. Di Netlify Dashboard, buka site Anda
+2. Klik **"Domain settings"**
+3. Klik **"Add custom domain"**
+4. Ikuti instruksi untuk setup DNS
 
 ## 🔧 Troubleshooting
 
@@ -318,17 +282,6 @@ npm run build
 2. Coba login dengan `admin` / `password`
 3. Cek console browser untuk error detail
 
-### ❌ Build Error di Vercel/Netlify
-**Solusi:**
-1. Pastikan `package.json` ter-commit
-2. Cek build logs untuk error detail
-3. Pastikan semua dependencies valid
-
-### ❌ 404 Error di Netlify
-**Solusi:**
-1. Pastikan file `public/_redirects` ada dengan isi `/*    /index.html   200`
-2. Redeploy setelah menambah file redirects
-
 ### ❌ Error: "No user updated - user not found"
 **Solusi:**
 1. Buka Supabase Dashboard → SQL Editor
@@ -343,6 +296,17 @@ CREATE POLICY "Allow anonymous UPDATE to admin_users"
   WITH CHECK (true);
 ```
 3. Refresh aplikasi dan coba update credentials lagi
+
+### ❌ Build Error di Vercel/Netlify
+**Solusi:**
+1. Pastikan `package.json` ter-commit
+2. Cek build logs untuk error detail
+3. Pastikan semua dependencies valid
+
+### ❌ 404 Error di Netlify
+**Solusi:**
+1. Pastikan file `public/_redirects` ada dengan isi `/*    /index.html   200`
+2. Redeploy setelah menambah file redirects
 
 ## 📋 Default Credentials
 
