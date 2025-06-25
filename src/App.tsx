@@ -6,7 +6,7 @@ import { authService } from './services/authService';
 import { monitorService } from './services/monitorService';
 import { monitoringService } from './services/monitoringService';
 import { brandingService } from './services/brandingService';
-import { useRealTimeMonitoring } from './hooks/useRealTimeMonitoring';
+import { useBackgroundMonitoring } from './hooks/useBackgroundMonitoring';
 import { useAutoCleanup } from './hooks/useAutoCleanup';
 import { envVars, isEnvConfigured } from './lib/supabase';
 import Navigation from './components/Navigation';
@@ -34,18 +34,16 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [appState, setAppState] = useState<'checking' | 'env_error' | 'ready'>('checking');
 
-  // Set up real-time monitoring
-  const { lastUpdateTime, activeChecks, isMonitoring } = useRealTimeMonitoring({
-    monitors,
-    monitoringSettings,
-    onMonitorsUpdate: setMonitors,
-    isActive: appState === 'ready'
+  // Set up background monitoring system
+  const { lastSync, isBackgroundActive, manualBackgroundCheck, manualSync } = useBackgroundMonitoring({
+    isActive: appState === 'ready',
+    onMonitorsUpdate: setMonitors
   });
 
   // Set up automatic cleanup - aktif setiap 24 jam
   const { lastCleanup, performManualCleanup } = useAutoCleanup({
     isActive: appState === 'ready',
-    intervalHours: 24 // Cleanup setiap 24 jam
+    intervalHours: 24
   });
 
   // Check environment and load data on app start
@@ -183,6 +181,52 @@ function App() {
     brandingService.applyBrandingToDOM(newBranding);
   };
 
+  // Immediate check function for new/edited monitors
+  const performImmediateCheck = async (monitor: Monitor) => {
+    try {
+      console.log(`🔄 Performing immediate check for: ${monitor.name}`);
+      
+      // Update UI to show checking status
+      setMonitors(prev => prev.map(m => 
+        m.id === monitor.id ? { ...m, status: 'checking' as const } : m
+      ));
+      
+      const formattedUrl = formatUrlForApi(monitor.url, monitor.method);
+      const result = await checkUptime(formattedUrl, monitor.method);
+      
+      // Save status check to history
+      await saveStatusCheck(monitor.id, result.status, result.responseTime);
+      
+      // Calculate uptime
+      const realUptime = await calculateUptime(monitor.id);
+      
+      const updatedMonitor = {
+        ...monitor,
+        status: result.status,
+        responseTime: result.responseTime,
+        lastChecked: new Date(),
+        uptime: realUptime
+      };
+
+      // Update database
+      await monitorService.updateMonitorStatus(
+        monitor.id,
+        result.status,
+        result.responseTime,
+        realUptime
+      );
+      
+      // Update UI
+      setMonitors(prev => prev.map(m => 
+        m.id === monitor.id ? updatedMonitor : m
+      ));
+
+      console.log(`✅ Immediate check completed for ${monitor.name}: ${result.status} (${result.responseTime}ms)`);
+    } catch (error) {
+      console.error(`❌ Immediate check failed for ${monitor.name}:`, error);
+    }
+  };
+
   const handleAddMonitor = async (data: MonitorFormData) => {
     try {
       console.log('🔄 Adding new monitor:', data.name);
@@ -191,40 +235,9 @@ function App() {
         setMonitors(prev => [...prev, newMonitor]);
         console.log('✅ Monitor added successfully:', newMonitor.name);
         
-        // Perform initial check with delay to prevent UI blocking
-        setTimeout(async () => {
-          try {
-            const formattedUrl = formatUrlForApi(data.url, data.method);
-            const result = await checkUptime(formattedUrl, data.method);
-            
-            // Save initial status check
-            await saveStatusCheck(newMonitor.id, result.status, result.responseTime);
-            
-            // Calculate uptime after initial check
-            const realUptime = await calculateUptime(newMonitor.id);
-            
-            const updatedMonitor = {
-              ...newMonitor,
-              ...result,
-              uptime: realUptime
-            };
-            
-            // Update database in background
-            monitorService.updateMonitorStatus(
-              newMonitor.id,
-              result.status,
-              result.responseTime,
-              realUptime
-            ).catch(error => {
-              console.error('Error updating new monitor status:', error);
-            });
-            
-            setMonitors(prev => prev.map(monitor => 
-              monitor.id === newMonitor.id ? updatedMonitor : monitor
-            ));
-          } catch (error) {
-            console.error('Error performing initial check:', error);
-          }
+        // Perform immediate check
+        setTimeout(() => {
+          performImmediateCheck(newMonitor);
         }, 1000);
       }
     } catch (error) {
@@ -237,50 +250,23 @@ function App() {
       console.log('🔄 Editing monitor:', data.name);
       const success = await monitorService.updateMonitor(id, data);
       if (success) {
+        const updatedMonitor = {
+          ...monitors.find(m => m.id === id)!,
+          name: data.name,
+          url: data.url,
+          method: data.method,
+          checkInterval: data.checkInterval,
+          status: 'checking' as const
+        };
+        
         setMonitors(prev => prev.map(monitor => 
-          monitor.id === id 
-            ? { 
-                ...monitor, 
-                name: data.name, 
-                url: data.url, 
-                method: data.method, 
-                checkInterval: data.checkInterval,
-                status: 'checking' as const 
-              }
-            : monitor
+          monitor.id === id ? updatedMonitor : monitor
         ));
         console.log('✅ Monitor updated successfully');
         
-        // Re-check the edited monitor with delay
-        setTimeout(async () => {
-          try {
-            const formattedUrl = formatUrlForApi(data.url, data.method);
-            const result = await checkUptime(formattedUrl, data.method);
-            
-            // Save status check
-            await saveStatusCheck(id, result.status, result.responseTime);
-            
-            // Calculate uptime
-            const realUptime = await calculateUptime(id);
-            
-            // Update database in background
-            monitorService.updateMonitorStatus(
-              id,
-              result.status,
-              result.responseTime,
-              realUptime
-            ).catch(error => {
-              console.error('Error updating edited monitor status:', error);
-            });
-            
-            setMonitors(prev => prev.map(m => 
-              m.id === id 
-                ? { ...m, ...result, uptime: realUptime }
-                : m
-            ));
-          } catch (error) {
-            console.error('Error re-checking edited monitor:', error);
-          }
+        // Perform immediate check
+        setTimeout(() => {
+          performImmediateCheck(updatedMonitor);
         }, 1000);
       }
     } catch (error) {
@@ -489,18 +475,21 @@ function App() {
           onDeleteMonitor={handleDeleteMonitor}
           monitoringSettings={monitoringSettings}
           onSettingsUpdate={handleSettingsUpdate}
-          lastUpdateTime={lastUpdateTime}
-          activeChecks={activeChecks}
-          isMonitoring={isMonitoring}
+          lastUpdateTime={lastSync}
+          activeChecks={new Set()}
+          isMonitoring={isBackgroundActive}
           brandingSettings={brandingSettings}
           onBrandingUpdate={handleBrandingUpdate}
+          onManualBackgroundCheck={manualBackgroundCheck}
+          onManualSync={manualSync}
         />
       ) : (
         <UserDashboard 
           monitors={monitors} 
-          lastUpdateTime={lastUpdateTime}
-          activeChecks={activeChecks}
-          isMonitoring={isMonitoring}
+          lastUpdateTime={lastSync}
+          activeChecks={new Set()}
+          isMonitoring={isBackgroundActive}
+          onManualSync={manualSync}
         />
       )}
     </div>
