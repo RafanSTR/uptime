@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Monitor, MonitoringSettings } from '../types/monitor';
-import { checkUptime, calculateUptime, formatUrlForApi } from '../utils/uptimeChecker';
+import { checkUptime, calculateUptime, formatUrlForApi, saveStatusCheck } from '../utils/uptimeChecker';
 import { monitorService } from '../services/monitorService';
 
 interface UseRealTimeMonitoringProps {
@@ -50,12 +50,18 @@ export const useRealTimeMonitoring = ({
         responseTime: result.responseTime
       });
       
+      // Save status check to history
+      await saveStatusCheck(monitor.id, result.status, result.responseTime);
+      
+      // Calculate real uptime from history
+      const realUptime = await calculateUptime(monitor.id);
+      
       const updatedMonitor = {
         ...monitor,
         status: result.status,
         responseTime: result.responseTime,
         lastChecked: new Date(),
-        uptime: calculateUptime(monitor)
+        uptime: realUptime // Use calculated uptime
       };
 
       // Update database in background
@@ -63,7 +69,7 @@ export const useRealTimeMonitoring = ({
         monitor.id,
         result.status,
         result.responseTime,
-        calculateUptime(monitor)
+        realUptime
       ).catch(error => {
         console.error('Error updating monitor status in database:', error);
       });
@@ -77,11 +83,18 @@ export const useRealTimeMonitoring = ({
     } catch (error) {
       console.error(`❌ Real-time check failed for ${monitor.name}:`, error);
       
+      // Save failed check to history
+      await saveStatusCheck(monitor.id, 'down', 0);
+      
+      // Calculate uptime after failed check
+      const realUptime = await calculateUptime(monitor.id);
+      
       const failedMonitor = {
         ...monitor,
         status: 'down' as const,
         responseTime: 0,
-        lastChecked: new Date()
+        lastChecked: new Date(),
+        uptime: realUptime
       };
 
       // Update database in background
@@ -89,7 +102,7 @@ export const useRealTimeMonitoring = ({
         monitor.id,
         'down',
         0,
-        monitor.uptime
+        realUptime
       ).catch(error => {
         console.error('Error updating failed monitor status:', error);
       });
