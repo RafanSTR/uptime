@@ -61,7 +61,7 @@ export const useRealTimeMonitoring = ({
         status: result.status,
         responseTime: result.responseTime,
         lastChecked: new Date(),
-        uptime: realUptime
+        uptime: realUptime // Use calculated uptime
       };
 
       // Update database in background
@@ -184,7 +184,7 @@ export const useRealTimeMonitoring = ({
       intervalRefs.current.forEach(interval => clearInterval(interval));
       intervalRefs.current.clear();
     };
-  }, [monitors, monitoringSettings, isActive, scheduleCheck]);
+  }, [monitors.length, monitoringSettings, isActive, scheduleCheck]);
 
   // Clean up intervals for removed monitors
   useEffect(() => {
