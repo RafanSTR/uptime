@@ -7,6 +7,7 @@ import { monitorService } from './services/monitorService';
 import { monitoringService } from './services/monitoringService';
 import { brandingService } from './services/brandingService';
 import { useRealTimeMonitoring } from './hooks/useRealTimeMonitoring';
+import { useAutoCleanup } from './hooks/useAutoCleanup';
 import { envVars, isEnvConfigured } from './lib/supabase';
 import Navigation from './components/Navigation';
 import AdminDashboard from './components/AdminDashboard';
@@ -41,6 +42,12 @@ function App() {
     isActive: appState === 'ready'
   });
 
+  // Set up automatic cleanup - aktif setiap 24 jam
+  const { lastCleanup, performManualCleanup } = useAutoCleanup({
+    isActive: appState === 'ready',
+    intervalHours: 24 // Cleanup setiap 24 jam
+  });
+
   // Check environment and load data on app start
   useEffect(() => {
     const initializeApp = async () => {
@@ -67,6 +74,13 @@ function App() {
         // Load application data
         await loadInitialData();
         setAppState('ready');
+        
+        // Log cleanup status
+        if (lastCleanup) {
+          console.log(`🧹 Last automatic cleanup: ${lastCleanup.toLocaleString()}`);
+        } else {
+          console.log('🧹 Automatic cleanup will start in 5 minutes');
+        }
         
       } catch (error) {
         console.error('❌ App initialization failed:', error);
