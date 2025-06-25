@@ -21,6 +21,8 @@ interface AdminDashboardProps {
   isMonitoring: boolean;
   brandingSettings: IBrandingSettings;
   onBrandingUpdate: (settings: IBrandingSettings) => void;
+  onManualBackgroundCheck: () => void;
+  onManualSync: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -34,7 +36,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeChecks,
   isMonitoring,
   brandingSettings,
-  onBrandingUpdate
+  onBrandingUpdate,
+  onManualBackgroundCheck,
+  onManualSync
 }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -110,6 +114,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <div className="flex space-x-2">
             <button
+              onClick={onManualBackgroundCheck}
+              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 text-sm"
+              title="Trigger manual check untuk semua monitor"
+            >
+              <Clock className="h-4 w-4" />
+              <span>Cek Sekarang</span>
+            </button>
+            <button
               onClick={handleManualCleanup}
               disabled={isCleaningUp}
               className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -158,6 +170,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             lastUpdateTime={lastUpdateTime}
             activeChecks={activeChecks}
             totalMonitors={monitors.length}
+            onManualSync={onManualSync}
           />
         </div>
 
@@ -173,8 +186,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               : 'Monitoring berjalan dengan interval individual untuk setiap monitor'
             }
             {' • '}
+            <span className="font-medium">Real-time check setiap 1 menit</span>
+            {' • '}
             <span className="font-medium">Auto-cleanup aktif setiap 24 jam</span>
-            {' (data >90 hari akan dihapus otomatis)'}
           </p>
         </div>
 

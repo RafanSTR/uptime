@@ -9,13 +9,15 @@ interface UserDashboardProps {
   lastUpdateTime: Date;
   activeChecks: Set<string>;
   isMonitoring: boolean;
+  onManualSync: () => void;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ 
   monitors, 
   lastUpdateTime, 
   activeChecks, 
-  isMonitoring 
+  isMonitoring,
+  onManualSync
 }) => {
   const stats = useMemo(() => {
     const upMonitors = monitors.filter(m => m.status === 'up').length;
@@ -44,6 +46,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           lastUpdateTime={lastUpdateTime}
           activeChecks={activeChecks}
           totalMonitors={monitors.length}
+          onManualSync={onManualSync}
         />
       </div>
 
