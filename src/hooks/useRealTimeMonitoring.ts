@@ -61,7 +61,7 @@ export const useRealTimeMonitoring = ({
         status: result.status,
         responseTime: result.responseTime,
         lastChecked: new Date(),
-        uptime: realUptime // Use calculated uptime
+        uptime: realUptime
       };
 
       // Update database in background
@@ -184,109 +184,7 @@ export const useRealTimeMonitoring = ({
       intervalRefs.current.forEach(interval => clearInterval(interval));
       intervalRefs.current.clear();
     };
-  }, [monitors.length, monitoringSettings, isActive, scheduleCheck]);
-
-  // Clean up intervals for removed monitors
-  useEffect(() => {
-    const currentMonitorIds = new Set(monitors.map(m => m.id));
-    
-    intervalRefs.current.forEach((interval, monitorId) => {
-      if (!currentMonitorIds.has(monitorId)) {
-        clearInterval(interval);
-        intervalRefs.current.delete(monitorId);
-        isCheckingRef.current.delete(monitorId);
-        setActiveChecks(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(monitorId);
-          return newSet;
-        });
-      }
-    });
-  }, [monitors]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      intervalRefs.current.forEach(interval => clearInterval(interval));
-      intervalRefs.current.clear();
-      isCheckingRef.current.clear();
-      setActiveChecks(new Set());
-    };
-  }, []);
-
-  return {
-    lastUpdateTime,
-    activeChecks,
-    isMonitoring: intervalRefs.current.size > 0
-  };
-};
-      );
-    } finally {
-      isCheckingRef.current.delete(monitor.id);
-      setActiveChecks(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(monitor.id);
-        return newSet;
-      });
-    }
-  }, [onMonitorsUpdate]);
-
-  const scheduleCheck = useCallback((monitor: Monitor) => {
-    const checkInterval = monitoringSettings.enableGlobalInterval 
-      ? monitoringSettings.globalCheckInterval 
-      : monitor.checkInterval;
-
-    const intervalMs = checkInterval * 60 * 1000;
-    
-    // Clear existing interval if any
-    const existingInterval = intervalRefs.current.get(monitor.id);
-    if (existingInterval) {
-      clearInterval(existingInterval);
-    }
-
-    // Calculate when next check should happen
-    const timeSinceLastCheck = Date.now() - monitor.lastChecked.getTime();
-    const timeUntilNextCheck = Math.max(0, intervalMs - timeSinceLastCheck);
-
-    // Schedule initial check
-    const initialTimeout = setTimeout(() => {
-      performCheck(monitor);
-      
-      // Set up recurring interval
-      const recurringInterval = setInterval(() => {
-        performCheck(monitor);
-      }, intervalMs);
-      
-      intervalRefs.current.set(monitor.id, recurringInterval);
-    }, Math.min(timeUntilNextCheck, 5000)); // Max 5 seconds initial delay
-
-    intervalRefs.current.set(monitor.id, initialTimeout);
-  }, [monitoringSettings, performCheck]);
-
-  // Set up monitoring when monitors or settings change
-  useEffect(() => {
-    if (!isActive) {
-      // Clear all intervals when not active
-      intervalRefs.current.forEach(interval => clearInterval(interval));
-      intervalRefs.current.clear();
-      return;
-    }
-
-    // Clear existing intervals
-    intervalRefs.current.forEach(interval => clearInterval(interval));
-    intervalRefs.current.clear();
-
-    // Set up monitoring for each monitor
-    monitors.forEach(monitor => {
-      scheduleCheck(monitor);
-    });
-
-    // Cleanup function
-    return () => {
-      intervalRefs.current.forEach(interval => clearInterval(interval));
-      intervalRefs.current.clear();
-    };
-  }, [monitors.length, monitoringSettings, isActive, scheduleCheck]);
+  }, [monitors, monitoringSettings, isActive, scheduleCheck]);
 
   // Clean up intervals for removed monitors
   useEffect(() => {
