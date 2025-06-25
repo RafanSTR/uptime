@@ -115,9 +115,8 @@ function App() {
       if (brandingData) {
         console.log('✅ Loaded branding settings:', brandingData);
         setBrandingSettings(brandingData);
-        // Apply branding immediately
-        document.title = `${brandingData.appName} - Professional Uptime Monitoring`;
-        brandingService.updateFavicon(brandingData.faviconUrl);
+        // Apply branding immediately to DOM
+        brandingService.applyBrandingToDOM(brandingData);
       }
       
     } catch (error) {
@@ -176,9 +175,12 @@ function App() {
   };
 
   // Handle branding update
-  const handleBrandingUpdate = (newBranding: BrandingSettings) => {
+  const handleBrandingUpdate = async (newBranding: BrandingSettings) => {
     console.log('🔄 Updating branding settings:', newBranding);
     setBrandingSettings(newBranding);
+    
+    // Apply branding changes immediately to DOM
+    brandingService.applyBrandingToDOM(newBranding);
   };
 
   const handleAddMonitor = async (data: MonitorFormData) => {
