@@ -177,31 +177,66 @@ export const saveStatusCheck = async (monitorId: string, status: 'up' | 'down', 
   }
 };
 
-// Fungsi untuk cleanup old status checks (opsional, untuk menjaga ukuran database)
-export const cleanupOldStatusChecks = async (): Promise<void> => {
+// Fungsi untuk cleanup old status checks - ENHANCED dengan logging yang lebih baik
+export const cleanupOldStatusChecks = async (): Promise<{ success: boolean; deletedCount: number; error?: string }> => {
   try {
     const { supabase, isEnvConfigured } = await import('../lib/supabase');
     
     if (!isEnvConfigured || !supabase) {
-      return;
+      console.warn('🧹 Cleanup skipped: Supabase not configured');
+      return { success: false, deletedCount: 0, error: 'Supabase not configured' };
     }
 
     // Hapus status checks yang lebih dari 90 hari
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const { error } = await supabase
+    console.log(`🧹 Starting cleanup of status checks older than ${ninetyDaysAgo.toISOString()}`);
+
+    // Hitung jumlah records yang akan dihapus terlebih dahulu
+    const { count: recordsToDelete, error: countError } = await supabase
+      .from('status_checks')
+      .select('*', { count: 'exact', head: true })
+      .lt('checked_at', ninetyDaysAgo.toISOString());
+
+    if (countError) {
+      console.error('❌ Error counting records for cleanup:', countError);
+      return { success: false, deletedCount: 0, error: countError.message };
+    }
+
+    const recordCount = recordsToDelete || 0;
+    console.log(`🧹 Found ${recordCount} old records to cleanup`);
+
+    if (recordCount === 0) {
+      console.log('✅ No old records to cleanup');
+      return { success: true, deletedCount: 0 };
+    }
+
+    // Lakukan penghapusan
+    const { error: deleteError } = await supabase
       .from('status_checks')
       .delete()
       .lt('checked_at', ninetyDaysAgo.toISOString());
 
-    if (error) {
-      console.error('Error cleaning up old status checks:', error);
-    } else {
-      console.log('✅ Old status checks cleaned up (older than 90 days)');
+    if (deleteError) {
+      console.error('❌ Error during cleanup:', deleteError);
+      return { success: false, deletedCount: 0, error: deleteError.message };
     }
+
+    console.log(`✅ Cleanup completed successfully: ${recordCount} old status checks deleted`);
+    
+    // Log statistik database setelah cleanup
+    const { count: remainingRecords } = await supabase
+      .from('status_checks')
+      .select('*', { count: 'exact', head: true });
+
+    console.log(`📊 Database stats after cleanup: ${remainingRecords || 0} records remaining`);
+
+    return { success: true, deletedCount: recordCount };
   } catch (error) {
-    console.error('Error during cleanup:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Cleanup error:', error);
+    return { success: false, deletedCount: 0, error: errorMessage };
   }
 };
 
