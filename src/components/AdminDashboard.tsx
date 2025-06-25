@@ -6,7 +6,8 @@ import MonitoringSettings from './MonitoringSettings';
 import BrandingSettings from './BrandingSettings';
 import RealTimeIndicator from './RealTimeIndicator';
 import { BrandingSettings as IBrandingSettings } from '../types/branding';
-import { Plus, Settings, BarChart3, Clock, Palette } from 'lucide-react';
+import { cleanupOldStatusChecks } from '../utils/uptimeChecker';
+import { Plus, Settings, BarChart3, Clock, Palette, Trash2 } from 'lucide-react';
 
 interface AdminDashboardProps {
   monitors: Monitor[];
@@ -39,6 +40,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBrandingOpen, setIsBrandingOpen] = useState(false);
   const [editingMonitor, setEditingMonitor] = useState<Monitor | null>(null);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   const stats = useMemo(() => {
     const upMonitors = monitors.filter(m => m.status === 'up').length;
@@ -68,6 +70,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingMonitor(null);
   };
 
+  const handleManualCleanup = async () => {
+    if (confirm('Apakah Anda yakin ingin menjalankan cleanup manual? Ini akan menghapus data status checks yang lebih dari 90 hari.')) {
+      setIsCleaningUp(true);
+      try {
+        const result = await cleanupOldStatusChecks();
+        if (result.success) {
+          alert(`✅ Cleanup berhasil! ${result.deletedCount} records lama telah dihapus.`);
+        } else {
+          alert(`❌ Cleanup gagal: ${result.error}`);
+        }
+      } catch (error) {
+        alert('❌ Terjadi kesalahan saat cleanup');
+      } finally {
+        setIsCleaningUp(false);
+      }
+    }
+  };
+
   const getNextCheckTime = (monitor: Monitor) => {
     const interval = monitoringSettings.enableGlobalInterval 
       ? monitoringSettings.globalCheckInterval 
@@ -89,6 +109,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <p className="text-gray-600 text-sm mt-1">Kelola monitor website dan lihat analitik real-time</p>
           </div>
           <div className="flex space-x-2">
+            <button
+              onClick={handleManualCleanup}
+              disabled={isCleaningUp}
+              className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Cleanup data lama (>90 hari)"
+            >
+              {isCleaningUp ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Cleanup...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  <span>Cleanup</span>
+                </>
+              )}
+            </button>
             <button
               onClick={() => setIsBrandingOpen(true)}
               className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2 text-sm"
@@ -134,6 +172,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ? `Monitoring berjalan dengan interval global: setiap ${monitoringSettings.globalCheckInterval} menit`
               : 'Monitoring berjalan dengan interval individual untuk setiap monitor'
             }
+            {' • '}
+            <span className="font-medium">Auto-cleanup aktif setiap 24 jam</span>
+            {' (data >90 hari akan dihapus otomatis)'}
           </p>
         </div>
 
