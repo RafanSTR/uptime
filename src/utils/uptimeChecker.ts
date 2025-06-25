@@ -7,7 +7,7 @@ const HTTP_HTTPS_API_ENDPOINTS = [
     "https://cf2.apicek2.workers.dev/status",
     "https://cf3.apicek3.workers.dev/status",
     "https://cf4.apicek4.workers.dev/status"
-];
+]
 
 // API endpoint untuk ping (tetap menggunakan yang original)
 const PING_API_ENDPOINT = 'https://api.autsc.my.id/status';
