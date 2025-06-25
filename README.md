@@ -61,19 +61,33 @@ CREATE TABLE IF NOT EXISTS monitoring_settings (
   updated_at timestamptz DEFAULT now()
 );
 
--- 5. Enable Row Level Security
+-- 5. Create branding_settings table
+CREATE TABLE IF NOT EXISTS branding_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  app_name text DEFAULT 'UptimeWatch' NOT NULL,
+  logo_url text DEFAULT '',
+  favicon_url text DEFAULT '/vite.svg' NOT NULL,
+  primary_color text DEFAULT '#2563eb' NOT NULL,
+  secondary_color text DEFAULT '#1e40af' NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 6. Enable Row Level Security
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE status_checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monitoring_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE branding_settings ENABLE ROW LEVEL SECURITY;
 
--- 6. Grant necessary permissions to anon role BEFORE creating RLS policies
+-- 7. Grant necessary permissions to anon role BEFORE creating RLS policies
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.monitors TO anon;
 GRANT SELECT, INSERT ON public.status_checks TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.monitoring_settings TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.branding_settings TO anon;
 
--- 7. Create RLS Policies for admin_users
+-- 8. Create RLS Policies for admin_users
 DROP POLICY IF EXISTS "Allow SELECT for admin authentication" ON admin_users;
 CREATE POLICY "Allow SELECT for admin authentication"
   ON admin_users
@@ -104,7 +118,7 @@ CREATE POLICY "Allow anonymous UPDATE to admin_users"
   USING (true)
   WITH CHECK (true);
 
--- 8. Create RLS Policies for monitors
+-- 9. Create RLS Policies for monitors
 DROP POLICY IF EXISTS "Allow DELETE for monitor management" ON monitors;
 CREATE POLICY "Allow DELETE for monitor management"
   ON monitors
@@ -142,7 +156,7 @@ CREATE POLICY "Anyone can read monitors"
   TO anon, authenticated
   USING (true);
 
--- 9. Create RLS Policies for status_checks (uptime history)
+-- 10. Create RLS Policies for status_checks (uptime history)
 DROP POLICY IF EXISTS "Anyone can read status_checks" ON status_checks;
 CREATE POLICY "Anyone can read status_checks"
   ON status_checks
@@ -157,7 +171,7 @@ CREATE POLICY "Allow INSERT for status tracking"
   TO anon
   WITH CHECK (true);
 
--- 10. Create RLS Policies for monitoring_settings
+-- 11. Create RLS Policies for monitoring_settings
 DROP POLICY IF EXISTS "Allow INSERT for monitoring settings" ON monitoring_settings;
 CREATE POLICY "Allow INSERT for monitoring settings"
   ON monitoring_settings
@@ -180,17 +194,52 @@ CREATE POLICY "Allow UPDATE for monitoring settings"
   USING (true)
   WITH CHECK (true);
 
--- 11. Insert default admin user (username: admin, password: password)
+-- 12. Create RLS Policies for branding_settings
+DROP POLICY IF EXISTS "Allow SELECT for branding settings" ON branding_settings;
+CREATE POLICY "Allow SELECT for branding settings"
+  ON branding_settings
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow INSERT for branding settings" ON branding_settings;
+CREATE POLICY "Allow INSERT for branding settings"
+  ON branding_settings
+  FOR INSERT
+  TO anon
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow UPDATE for branding settings" ON branding_settings;
+CREATE POLICY "Allow UPDATE for branding settings"
+  ON branding_settings
+  FOR UPDATE
+  TO anon
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow DELETE for branding settings" ON branding_settings;
+CREATE POLICY "Allow DELETE for branding settings"
+  ON branding_settings
+  FOR DELETE
+  TO anon
+  USING (true);
+
+-- 13. Insert default admin user (username: admin, password: password)
 INSERT INTO admin_users (username, password_hash)
 VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi')
 ON CONFLICT (username) DO NOTHING;
 
--- 12. Insert default monitoring settings
+-- 14. Insert default monitoring settings
 INSERT INTO monitoring_settings (global_check_interval, enable_global_interval)
 VALUES (5, false)
 ON CONFLICT DO NOTHING;
 
--- 13. Create indexes for better performance
+-- 15. Insert default branding settings
+INSERT INTO branding_settings (app_name, logo_url, favicon_url, primary_color, secondary_color)
+VALUES ('UptimeWatch', '', '/vite.svg', '#2563eb', '#1e40af')
+ON CONFLICT DO NOTHING;
+
+-- 16. Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_status_checks_monitor_id ON status_checks(monitor_id);
 CREATE INDEX IF NOT EXISTS idx_status_checks_checked_at ON status_checks(checked_at);
 CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status);
@@ -330,6 +379,12 @@ GRANT SELECT, INSERT ON public.status_checks TO anon;
 ```
 3. Restart aplikasi setelah menjalankan SQL
 
+### ❌ Branding Tidak Sync Antar Browser
+**Solusi:**
+1. Pastikan tabel `branding_settings` sudah dibuat dengan SQL setup di atas
+2. Cek apakah ada error di console browser
+3. Refresh aplikasi setelah mengubah branding settings
+
 ## 📋 Default Credentials
 
 Setelah setup database, gunakan kredensial berikut:
@@ -362,6 +417,7 @@ Setelah setup database, gunakan kredensial berikut:
 - Ubah nama aplikasi
 - Ganti favicon
 - Sesuaikan warna tema
+- **Sync antar semua browser** 🆕
 
 ### ✅ Uptime Tracking yang Akurat
 - **History-based calculation**: Uptime dihitung berdasarkan data historis real
@@ -408,6 +464,21 @@ Setelah setup database, gunakan kredensial berikut:
 - ✅ **Efisien**: Cleanup data lama otomatis
 - ✅ **Reliable**: Tidak bergantung pada nilai statis
 
+## 🎨 Branding System
+
+### **Cross-Browser Sync**
+- Pengaturan branding disimpan di database Supabase
+- Otomatis sync di semua browser dan device
+- Real-time update favicon, title, dan warna
+- Fallback ke localStorage jika database tidak tersedia
+
+### **Customization Options:**
+- ✅ **App Name**: Ubah nama aplikasi
+- ✅ **Logo**: Upload logo custom dari URL
+- ✅ **Favicon**: Ganti ikon tab browser
+- ✅ **Colors**: Sesuaikan warna primer dan sekunder
+- ✅ **Reset**: Kembalikan ke pengaturan default
+
 ## 🔒 Keamanan
 
 - Environment variables untuk kredensial
@@ -442,4 +513,5 @@ Untuk bantuan teknis:
 ✅ **Platform Agnostic** - Jalan di Vercel, Netlify, atau hosting lain  
 ✅ **Zero Dependencies** - Tidak butuh tools tambahan  
 ✅ **Clear Documentation** - Panduan step-by-step yang jelas  
-✅ **Accurate Uptime** - Tracking berbasis history yang akurat
+✅ **Accurate Uptime** - Tracking berbasis history yang akurat  
+✅ **Cross-Browser Branding** - Branding sync di semua browser 🆕
