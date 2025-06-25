@@ -1,139 +1,96 @@
 import { Monitor } from '../types/monitor';
 
-// Multiple API endpoints untuk HTTP/HTTPS dengan load balancing
-const HTTP_HTTPS_API_ENDPOINTS = [
-  'https://cek.apiii.workers.dev/status',
-  'http://cf1.apicek.workers.dev/status',
-  'https://cf2.apicek2.workers.dev/status',
-  'https://cf3.apicek3.workers.dev/status',
-  'https://cf4.apicek4.workers.dev/status'
-];
-
-
-// API endpoint untuk ping (tetap menggunakan yang original)
-const PING_API_ENDPOINT = 'https://api.autsc.my.id/status';
-
-// Fungsi untuk memilih endpoint HTTP/HTTPS secara acak
-const getRandomHttpApiEndpoint = (): string => {
-  const randomIndex = Math.floor(Math.random() * HTTP_HTTPS_API_ENDPOINTS.length);
-  const selectedEndpoint = HTTP_HTTPS_API_ENDPOINTS[randomIndex];
-  console.log(`🎲 Selected random HTTP/HTTPS API endpoint: ${selectedEndpoint} (${randomIndex + 1}/${HTTP_HTTPS_API_ENDPOINTS.length})`);
-  return selectedEndpoint;
-};
-
-// Fungsi untuk mendapatkan endpoint berdasarkan method
-const getApiEndpoint = (method: 'http' | 'ping'): string => {
-  if (method === 'ping') {
-    return PING_API_ENDPOINT;
-  } else {
-    return getRandomHttpApiEndpoint();
-  }
-};
+// API endpoint untuk pengecekan uptime
+const UPTIME_API_BASE = 'https://api.autsc.my.id/status';
 
 export const checkUptime = async (url: string, method: 'http' | 'ping'): Promise<{ status: 'up' | 'down'; responseTime: number }> => {
   const formattedUrl = formatUrlForApi(url, method);
-  const maxRetries = 3;
   
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      // Pilih endpoint API
-      const apiEndpoint = getApiEndpoint(method);
-      
-      console.log(`🔄 Attempt ${attempt}/${maxRetries} - Checking uptime for ${formattedUrl} using ${method} method via ${apiEndpoint}`);
-      
-      // Tentukan metode API berdasarkan input
-      let apiMethod = method;
-      if (method === 'http') {
-        // Untuk HTTP, gunakan https jika URL sudah memiliki protokol https, atau http jika tidak
-        if (formattedUrl.startsWith('https://')) {
-          apiMethod = 'https';
-        } else {
-          apiMethod = 'http';
-        }
+  try {
+    console.log(`Checking uptime for ${formattedUrl} using ${method} method`);
+    
+    // Tentukan metode API berdasarkan input
+    let apiMethod = method;
+    if (method === 'http') {
+      // Untuk HTTP, gunakan https jika URL sudah memiliki protokol https, atau http jika tidak
+      if (formattedUrl.startsWith('https://')) {
+        apiMethod = 'https';
+      } else {
+        apiMethod = 'http';
       }
-      
-      // Buat URL API
-      const apiUrl = `${apiEndpoint}?domain=${encodeURIComponent(formattedUrl)}&method=${apiMethod}`;
-      console.log(`📡 API URL: ${apiUrl}`);
-      
-      // Buat AbortController untuk timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
-      
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'UptimeMonitor/1.0'
-        },
-        signal: controller.signal,
-        mode: 'cors'
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log(`📊 Raw API response for ${formattedUrl} via ${apiEndpoint}:`, data);
-      
-      // Parse response dari API - pastikan mengambil nilai yang benar
-      const isUp = data.status === 'online';
-      
-      // Pastikan latency_ms adalah number dan dalam range yang wajar
-      let responseTime = 0;
-      if (data.latency_ms !== undefined && data.latency_ms !== null) {
-        const rawLatency = Number(data.latency_ms);
-        
-        // PENTING: Pastikan ini adalah latensi dari API, bukan dari interval monitoring
-        // Latensi normal biasanya di bawah 5000ms (5 detik)
-        if (rawLatency > 0 && rawLatency < 10000) { // Maksimal 10 detik untuk latensi normal
-          responseTime = Math.round(rawLatency);
-        } else if (rawLatency >= 10000) {
-          console.warn(`⚠️ Latency sangat tinggi (${rawLatency}ms) untuk ${formattedUrl}, kemungkinan ada masalah dengan API atau koneksi`);
-          responseTime = Math.round(rawLatency); // Tetap tampilkan nilai asli tapi dengan warning
-        } else {
-          console.warn(`⚠️ Invalid latency value (${rawLatency}ms) untuk ${formattedUrl}, setting to 0`);
-          responseTime = 0;
-        }
-      }
-      
-      console.log(`✅ Uptime check successful for ${formattedUrl} via ${apiEndpoint}:`, {
-        status: isUp ? 'up' : 'down',
-        responseTime: responseTime,
-        apiMethod: apiMethod,
-        apiEndpoint: apiEndpoint,
-        attempt: attempt,
-        rawApiLatency: data.latency_ms,
-        processedLatency: responseTime
-      });
-      
-      return {
-        status: isUp ? 'up' : 'down',
-        responseTime: responseTime
-      };
-      
-    } catch (error) {
-      console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${formattedUrl}:`, error);
-      
-      // Jika ini bukan attempt terakhir, coba lagi dengan endpoint berbeda
-      if (attempt < maxRetries) {
-        console.log(`🔄 Retrying with different endpoint... (${attempt + 1}/${maxRetries})`);
-        continue;
-      }
-      
-      // Jika semua attempts gagal
-      console.error(`❌ All ${maxRetries} attempts failed for ${formattedUrl}`);
     }
+    
+    // Buat URL API
+    const apiUrl = `${UPTIME_API_BASE}?domain=${encodeURIComponent(formattedUrl)}&method=${apiMethod}`;
+    console.log(`API URL: ${apiUrl}`);
+    
+    // Buat AbortController untuk timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'UptimeMonitor/1.0'
+      },
+      signal: controller.signal,
+      mode: 'cors'
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API request failed with status: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log(`Raw API response for ${formattedUrl}:`, data);
+    
+    // Parse response dari API - pastikan mengambil nilai yang benar
+    const isUp = data.status === 'online';
+    
+    // Pastikan latency_ms adalah number dan dalam range yang wajar
+    let responseTime = 0;
+    if (data.latency_ms !== undefined && data.latency_ms !== null) {
+      const rawLatency = Number(data.latency_ms);
+      
+      // PENTING: Pastikan ini adalah latensi dari API, bukan dari interval monitoring
+      // Latensi normal biasanya di bawah 5000ms (5 detik)
+      if (rawLatency > 0 && rawLatency < 10000) { // Maksimal 10 detik untuk latensi normal
+        responseTime = Math.round(rawLatency);
+      } else if (rawLatency >= 10000) {
+        console.warn(`Latency sangat tinggi (${rawLatency}ms) untuk ${formattedUrl}, kemungkinan ada masalah dengan API atau koneksi`);
+        responseTime = Math.round(rawLatency); // Tetap tampilkan nilai asli tapi dengan warning
+      } else {
+        console.warn(`Invalid latency value (${rawLatency}ms) untuk ${formattedUrl}, setting to 0`);
+        responseTime = 0;
+      }
+    }
+    
+    console.log(`✅ Uptime check result for ${formattedUrl}:`, {
+      status: isUp ? 'up' : 'down',
+      responseTime: responseTime,
+      apiMethod: apiMethod,
+      rawApiLatency: data.latency_ms,
+      processedLatency: responseTime,
+      isValidLatency: responseTime > 0 && responseTime < 10000
+    });
+    
+    return {
+      status: isUp ? 'up' : 'down',
+      responseTime: responseTime
+    };
+    
+  } catch (error) {
+    console.error(`❌ Uptime check failed for ${formattedUrl}:`, error);
+    
+    // Fallback: Return down status dengan response time 0
+    return {
+      status: 'down',
+      responseTime: 0
+    };
   }
-  
-  // Fallback: Return down status dengan response time 0 jika semua attempts gagal
-  return {
-    status: 'down',
-    responseTime: 0
-  };
 };
 
 export const calculateUptime = async (monitorId: string): Promise<number> => {
@@ -309,45 +266,10 @@ export const formatUrlForApi = (url: string, method: 'http' | 'ping'): string =>
   }
 };
 
-// Utility function untuk test konektivitas semua API endpoints
-export const testApiConnectivity = async (): Promise<{ 
-  httpHttpsEndpoints: Array<{ endpoint: string; status: 'working' | 'failed'; error?: string }>;
-  pingEndpoint: { endpoint: string; status: 'working' | 'failed'; error?: string };
-}> => {
-  console.log('🧪 Testing connectivity to all API endpoints...');
-  
-  // Test HTTP/HTTPS endpoints
-  const httpHttpsResults = await Promise.all(
-    HTTP_HTTPS_API_ENDPOINTS.map(async (endpoint) => {
-      try {
-        const testUrl = `${endpoint}?domain=google.com&method=https`;
-        const response = await fetch(testUrl, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ ${endpoint} is working:`, data);
-          return { endpoint, status: 'working' as const };
-        } else {
-          return { endpoint, status: 'failed' as const, error: `HTTP ${response.status}` };
-        }
-      } catch (error) {
-        return { 
-          endpoint, 
-          status: 'failed' as const, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
-        };
-      }
-    })
-  );
-
-  // Test Ping endpoint
-  let pingResult;
+// Utility function untuk test konektivitas API
+export const testApiConnectivity = async (): Promise<{ status: 'working' | 'failed'; error?: string }> => {
   try {
-    const testUrl = `${PING_API_ENDPOINT}?domain=google.com&method=ping`;
+    const testUrl = `${UPTIME_API_BASE}?domain=google.com&method=https`;
     const response = await fetch(testUrl, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -356,42 +278,20 @@ export const testApiConnectivity = async (): Promise<{
     
     if (response.ok) {
       const data = await response.json();
-      console.log(`✅ Ping endpoint is working:`, data);
-      pingResult = { endpoint: PING_API_ENDPOINT, status: 'working' as const };
+      console.log('API connectivity test result:', data);
+      return {
+        status: 'working'
+      };
     } else {
-      pingResult = { endpoint: PING_API_ENDPOINT, status: 'failed' as const, error: `HTTP ${response.status}` };
+      return {
+        status: 'failed',
+        error: `HTTP ${response.status}`
+      };
     }
   } catch (error) {
-    pingResult = { 
-      endpoint: PING_API_ENDPOINT, 
-      status: 'failed' as const, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
-
-  console.log('🧪 API connectivity test completed:', {
-    httpHttpsWorking: httpHttpsResults.filter(r => r.status === 'working').length,
-    httpHttpsTotal: httpHttpsResults.length,
-    pingWorking: pingResult.status === 'working'
-  });
-
-  return {
-    httpHttpsEndpoints: httpHttpsResults,
-    pingEndpoint: pingResult
-  };
-};
-
-// Utility function untuk mendapatkan statistik penggunaan API
-export const getApiUsageStats = (): { 
-  httpHttpsEndpoints: string[];
-  pingEndpoint: string;
-  totalEndpoints: number;
-  loadBalancing: boolean;
-} => {
-  return {
-    httpHttpsEndpoints: HTTP_HTTPS_API_ENDPOINTS,
-    pingEndpoint: PING_API_ENDPOINT,
-    totalEndpoints: HTTP_HTTPS_API_ENDPOINTS.length + 1,
-    loadBalancing: true
-  };
 };
