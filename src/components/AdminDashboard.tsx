@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Monitor, MonitorFormData, MonitoringSettings as IMonitoringSettings } from '../types/monitor';
 import MonitorCard from './MonitorCard';
 import AddMonitorForm from './AddMonitorForm';
@@ -8,13 +8,12 @@ import RealTimeIndicator from './RealTimeIndicator';
 import { BrandingSettings as IBrandingSettings } from '../types/branding';
 import { cleanupOldStatusChecks } from '../utils/uptimeChecker';
 import { Plus, Settings, BarChart3, Clock, Palette, Trash2 } from 'lucide-react';
-import { monitorService } from '../services/monitorService';
 
 interface AdminDashboardProps {
   monitors: Monitor[];
-  onAddMonitor: (data: MonitorFormData) => Promise<void>;
-  onEditMonitor: (id: string, data: MonitorFormData) => Promise<void>;
-  onDeleteMonitor: (id: string) => Promise<void>;
+  onAddMonitor: (data: MonitorFormData) => void;
+  onEditMonitor: (id: string, data: MonitorFormData) => void;
+  onDeleteMonitor: (id: string) => void;
   monitoringSettings: IMonitoringSettings;
   onSettingsUpdate: (settings: IMonitoringSettings) => void;
   lastUpdateTime: Date;
@@ -22,8 +21,6 @@ interface AdminDashboardProps {
   isMonitoring: boolean;
   brandingSettings: IBrandingSettings;
   onBrandingUpdate: (settings: IBrandingSettings) => void;
-  onMonitorsUpdate: () => Promise<void>;
-  onForceCheck: (monitorId: string) => Promise<void>;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -37,35 +34,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeChecks,
   isMonitoring,
   brandingSettings,
-  onBrandingUpdate,
-  onMonitorsUpdate,
-  onForceCheck
+  onBrandingUpdate
 }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBrandingOpen, setIsBrandingOpen] = useState(false);
   const [editingMonitor, setEditingMonitor] = useState<Monitor | null>(null);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Load initial data
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await onMonitorsUpdate();
-      } catch (err) {
-        console.error('Failed to load monitors:', err);
-        setError('Gagal memuat data monitor. Silakan coba lagi.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [onMonitorsUpdate]);
 
   const stats = useMemo(() => {
     const upMonitors = monitors.filter(m => m.status === 'up').length;
@@ -81,22 +56,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsFormOpen(true);
   };
 
-  const handleFormSubmit = async (data: MonitorFormData) => {
-    try {
-      setIsLoading(true);
-      if (editingMonitor) {
-        await onEditMonitor(editingMonitor.id, data);
-      } else {
-        await onAddMonitor(data);
-      }
-      setIsFormOpen(false);
+  const handleFormSubmit = (data: MonitorFormData) => {
+    if (editingMonitor) {
+      onEditMonitor(editingMonitor.id, data);
       setEditingMonitor(null);
-      await onMonitorsUpdate();
-    } catch (err) {
-      console.error('Error saving monitor:', err);
-      setError('Gagal menyimpan monitor. Silakan coba lagi.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      onAddMonitor(data);
     }
   };
 
@@ -105,52 +70,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingMonitor(null);
   };
 
-  const handleDeleteMonitor = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus monitor ini?')) {
-      try {
-        setIsLoading(true);
-        await onDeleteMonitor(id);
-        await onMonitorsUpdate();
-      } catch (err) {
-        console.error('Error deleting monitor:', err);
-        setError('Gagal menghapus monitor. Silakan coba lagi.');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
   const handleManualCleanup = async () => {
     if (confirm('Apakah Anda yakin ingin menjalankan cleanup manual? Ini akan menghapus data status checks yang lebih dari 90 hari.')) {
       setIsCleaningUp(true);
-      setError(null);
       try {
         const result = await cleanupOldStatusChecks();
         if (result.success) {
           alert(`✅ Cleanup berhasil! ${result.deletedCount} records lama telah dihapus.`);
-          await onMonitorsUpdate();
         } else {
-          setError(`❌ Cleanup gagal: ${result.error}`);
+          alert(`❌ Cleanup gagal: ${result.error}`);
         }
-      } catch (err) {
-        console.error('Error during cleanup:', err);
-        setError('Terjadi kesalahan saat cleanup');
+      } catch (error) {
+        alert('❌ Terjadi kesalahan saat cleanup');
       } finally {
         setIsCleaningUp(false);
       }
-    }
-  };
-
-  const handleForceCheck = async (monitorId: string) => {
-    try {
-      setIsLoading(true);
-      await onForceCheck(monitorId);
-      await onMonitorsUpdate();
-    } catch (err) {
-      console.error('Error forcing check:', err);
-      setError('Gagal memaksa pengecekan. Silakan coba lagi.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -165,35 +99,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (diff < 60) return `${diff}s`;
     return `${Math.ceil(diff / 60)}m`;
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="ml-4 text-gray-600">Memuat data monitor...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error!</strong>
-          <span className="block sm:inline"> {error}</span>
-          <button 
-            onClick={() => setError(null)} 
-            className="absolute top-0 bottom-0 right-0 px-4 py-3"
-          >
-            <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-              <title>Close</title>
-              <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -246,6 +151,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
+        {/* Real-time Indicator */}
         <div className="mb-4">
           <RealTimeIndicator
             isMonitoring={isMonitoring}
@@ -255,6 +161,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           />
         </div>
 
+        {/* Monitoring Status Info */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
           <div className="flex items-center space-x-2 mb-1">
             <Clock className="h-4 w-4 text-blue-600" />
@@ -271,6 +178,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 transition-shadow duration-200 hover:shadow-md">
             <div className="flex items-center justify-between">
@@ -307,6 +215,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
+      {/* Monitors Grid */}
       {monitors.length === 0 ? (
         <div className="text-center py-8">
           <Settings className="h-10 w-10 text-gray-400 mx-auto mb-3" />
@@ -328,10 +237,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 monitor={monitor}
                 isAdmin={true}
                 onEdit={handleEdit}
-                onDelete={handleDeleteMonitor}
-                onForceCheck={handleForceCheck}
+                onDelete={onDeleteMonitor}
                 isActivelyChecking={activeChecks.has(monitor.id)}
               />
+              {/* Next check time - positioned to not overlap with buttons */}
               <div className="absolute top-2 left-2 bg-white bg-opacity-90 px-2 py-1 rounded text-xs text-gray-600 shadow-sm">
                 Next: {getNextCheckTime(monitor)}
               </div>
@@ -351,7 +260,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSettingsUpdate={onSettingsUpdate}
-        currentSettings={monitoringSettings}
       />
 
       <BrandingSettings
