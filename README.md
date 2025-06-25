@@ -1,6 +1,4 @@
-# example: https://uptime-psi-five.vercel.app/
-# username: admin
-# password: password 
+# UptimeWatch - Professional Uptime Monitoring
 
 Aplikasi monitoring uptime website yang modern dan profesional dengan setup manual yang mudah.
 
@@ -45,7 +43,7 @@ CREATE TABLE IF NOT EXISTS monitors (
   check_interval integer DEFAULT 5
 );
 
--- 3. Create status_checks table
+-- 3. Create status_checks table for uptime history tracking
 CREATE TABLE IF NOT EXISTS status_checks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   monitor_id uuid REFERENCES monitors(id) ON DELETE CASCADE,
@@ -69,7 +67,13 @@ ALTER TABLE monitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE status_checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monitoring_settings ENABLE ROW LEVEL SECURITY;
 
--- 6. Create RLS Policies for admin_users
+-- 6. Grant necessary permissions to anon role BEFORE creating RLS policies
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.monitors TO anon;
+GRANT SELECT, INSERT ON public.status_checks TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.monitoring_settings TO anon;
+
+-- 7. Create RLS Policies for admin_users
 DROP POLICY IF EXISTS "Allow SELECT for admin authentication" ON admin_users;
 CREATE POLICY "Allow SELECT for admin authentication"
   ON admin_users
@@ -91,6 +95,7 @@ CREATE POLICY "Prevent anonymous INSERT to admin_users"
   TO anon
   WITH CHECK (false);
 
+-- IMPORTANT: Allow UPDATE for admin credential changes
 DROP POLICY IF EXISTS "Allow anonymous UPDATE to admin_users" ON admin_users;
 CREATE POLICY "Allow anonymous UPDATE to admin_users"
   ON admin_users
@@ -99,7 +104,7 @@ CREATE POLICY "Allow anonymous UPDATE to admin_users"
   USING (true)
   WITH CHECK (true);
 
--- 7. Create RLS Policies for monitors
+-- 8. Create RLS Policies for monitors
 DROP POLICY IF EXISTS "Allow DELETE for monitor management" ON monitors;
 CREATE POLICY "Allow DELETE for monitor management"
   ON monitors
@@ -137,7 +142,7 @@ CREATE POLICY "Anyone can read monitors"
   TO anon, authenticated
   USING (true);
 
--- 8. Create RLS Policies for status_checks
+-- 9. Create RLS Policies for status_checks (uptime history)
 DROP POLICY IF EXISTS "Anyone can read status_checks" ON status_checks;
 CREATE POLICY "Anyone can read status_checks"
   ON status_checks
@@ -145,7 +150,14 @@ CREATE POLICY "Anyone can read status_checks"
   TO anon, authenticated
   USING (true);
 
--- 9. Create RLS Policies for monitoring_settings
+DROP POLICY IF EXISTS "Allow INSERT for status tracking" ON status_checks;
+CREATE POLICY "Allow INSERT for status tracking"
+  ON status_checks
+  FOR INSERT
+  TO anon
+  WITH CHECK (true);
+
+-- 10. Create RLS Policies for monitoring_settings
 DROP POLICY IF EXISTS "Allow INSERT for monitoring settings" ON monitoring_settings;
 CREATE POLICY "Allow INSERT for monitoring settings"
   ON monitoring_settings
@@ -168,15 +180,21 @@ CREATE POLICY "Allow UPDATE for monitoring settings"
   USING (true)
   WITH CHECK (true);
 
--- 10. Insert default admin user (username: admin, password: password)
+-- 11. Insert default admin user (username: admin, password: password)
 INSERT INTO admin_users (username, password_hash)
 VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi')
 ON CONFLICT (username) DO NOTHING;
 
--- 11. Insert default monitoring settings
+-- 12. Insert default monitoring settings
 INSERT INTO monitoring_settings (global_check_interval, enable_global_interval)
 VALUES (5, false)
 ON CONFLICT DO NOTHING;
+
+-- 13. Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_status_checks_monitor_id ON status_checks(monitor_id);
+CREATE INDEX IF NOT EXISTS idx_status_checks_checked_at ON status_checks(checked_at);
+CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status);
+CREATE INDEX IF NOT EXISTS idx_monitors_last_checked ON monitors(last_checked);
 ```
 
 #### C. Jalankan SQL
@@ -292,21 +310,6 @@ npm run build
 2. Coba login dengan `admin` / `password`
 3. Cek console browser untuk error detail
 
-### ❌ Error: "No user updated - user not found"
-**Solusi:**
-1. Buka Supabase Dashboard → SQL Editor
-2. Jalankan SQL berikut untuk memperbaiki RLS policy:
-```sql
-DROP POLICY IF EXISTS "Allow anonymous UPDATE to admin_users" ON admin_users;
-CREATE POLICY "Allow anonymous UPDATE to admin_users"
-  ON admin_users
-  FOR UPDATE
-  TO anon
-  USING (true)
-  WITH CHECK (true);
-```
-3. Refresh aplikasi dan coba update credentials lagi
-
 ### ❌ Build Error di Vercel/Netlify
 **Solusi:**
 1. Pastikan `package.json` ter-commit
@@ -317,6 +320,15 @@ CREATE POLICY "Allow anonymous UPDATE to admin_users"
 **Solusi:**
 1. Pastikan file `public/_redirects` ada dengan isi `/*    /index.html   200`
 2. Redeploy setelah menambah file redirects
+
+### ❌ Error: "new row violates row-level security policy"
+**Solusi:**
+1. Pastikan SQL setup terbaru sudah dijalankan (termasuk GRANT statements)
+2. Jika masih error, jalankan SQL berikut di Supabase SQL Editor:
+```sql
+GRANT SELECT, INSERT ON public.status_checks TO anon;
+```
+3. Restart aplikasi setelah menjalankan SQL
 
 ## 📋 Default Credentials
 
@@ -351,6 +363,12 @@ Setelah setup database, gunakan kredensial berikut:
 - Ganti favicon
 - Sesuaikan warna tema
 
+### ✅ Uptime Tracking yang Akurat
+- **History-based calculation**: Uptime dihitung berdasarkan data historis real
+- **30-day tracking**: Menggunakan data 30 hari terakhir untuk akurasi
+- **Automatic cleanup**: Data lama (>90 hari) dibersihkan otomatis
+- **Real-time updates**: Setiap pengecekan disimpan ke database
+
 ## 🛠️ Teknologi
 
 - **Frontend**: React + TypeScript + Tailwind CSS
@@ -371,6 +389,24 @@ Setelah setup database, gunakan kredensial berikut:
 - Server connectivity
 - Network latency
 - Basic availability check
+
+## 📈 Cara Kerja Uptime Percentage
+
+### **Real-time History Tracking**
+- Setiap pengecekan monitor disimpan ke tabel `status_checks`
+- Uptime dihitung berdasarkan 30 hari terakhir
+- Formula: `(jumlah check UP / total check) × 100`
+
+### **Contoh Perhitungan:**
+- Monitor dicek setiap 5 menit = 288 checks per hari
+- Dalam 24 jam: 280 up, 8 down
+- Uptime = (280/288) × 100 = **97.22%**
+
+### **Fitur Uptime:**
+- ✅ **Akurat**: Berdasarkan data historis real
+- ✅ **Otomatis**: Update setiap kali monitoring berjalan
+- ✅ **Efisien**: Cleanup data lama otomatis
+- ✅ **Reliable**: Tidak bergantung pada nilai statis
 
 ## 🔒 Keamanan
 
@@ -405,4 +441,5 @@ Untuk bantuan teknis:
 ✅ **Production Ready** - Tested dan optimized  
 ✅ **Platform Agnostic** - Jalan di Vercel, Netlify, atau hosting lain  
 ✅ **Zero Dependencies** - Tidak butuh tools tambahan  
-✅ **Clear Documentation** - Panduan step-by-step yang jelas
+✅ **Clear Documentation** - Panduan step-by-step yang jelas  
+✅ **Accurate Uptime** - Tracking berbasis history yang akurat
