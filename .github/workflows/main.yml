@@ -1,0 +1,16 @@
+name: Monitor Websites
+
+on:
+  schedule:
+    - cron: '*/1 * * * *' # Setiap 5 menit
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Monitoring
+        run: |
+          curl -X POST 'https://pbvijmxnyutsrtyfsqzh.supabase.co/functions/v1/cek-monitor' \
+            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidmlqbXhueXV0c3J0eWZzcXpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA4NjEwNDksImV4cCI6MjA2NjQzNzA0OX0.wU1kxXsOnANs2giyxFQTaPvAWJOOcBH-c7v-DAgQk70' \
+            -H 'Content-Type: application/json' \
+            --data '{"name":"Functions"}'
