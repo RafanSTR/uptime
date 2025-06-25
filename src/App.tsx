@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Monitor, MonitorFormData, User, MonitoringSettings } from './types/monitor';
 import { BrandingSettings } from './types/branding';
-import { checkUptime, calculateUptime, formatUrlForApi } from './utils/uptimeChecker';
+import { checkUptime, calculateUptime, formatUrlForApi, saveStatusCheck } from './utils/uptimeChecker';
 import { authService } from './services/authService';
 import { monitorService } from './services/monitorService';
 import { monitoringService } from './services/monitoringService';
@@ -180,10 +180,17 @@ function App() {
           try {
             const formattedUrl = formatUrlForApi(data.url, data.method);
             const result = await checkUptime(formattedUrl, data.method);
+            
+            // Save initial status check
+            await saveStatusCheck(newMonitor.id, result.status, result.responseTime);
+            
+            // Calculate uptime after initial check
+            const realUptime = await calculateUptime(newMonitor.id);
+            
             const updatedMonitor = {
               ...newMonitor,
               ...result,
-              uptime: calculateUptime(newMonitor)
+              uptime: realUptime
             };
             
             // Update database in background
@@ -191,7 +198,7 @@ function App() {
               newMonitor.id,
               result.status,
               result.responseTime,
-              calculateUptime(newMonitor)
+              realUptime
             ).catch(error => {
               console.error('Error updating new monitor status:', error);
             });
@@ -233,24 +240,28 @@ function App() {
           try {
             const formattedUrl = formatUrlForApi(data.url, data.method);
             const result = await checkUptime(formattedUrl, data.method);
-            const monitor = monitors.find(m => m.id === id);
-            if (monitor) {
-              // Update database in background
-              monitorService.updateMonitorStatus(
-                id,
-                result.status,
-                result.responseTime,
-                calculateUptime(monitor)
-              ).catch(error => {
-                console.error('Error updating edited monitor status:', error);
-              });
-              
-              setMonitors(prev => prev.map(m => 
-                m.id === id 
-                  ? { ...m, ...result, uptime: calculateUptime(monitor) }
-                  : m
-              ));
-            }
+            
+            // Save status check
+            await saveStatusCheck(id, result.status, result.responseTime);
+            
+            // Calculate uptime
+            const realUptime = await calculateUptime(id);
+            
+            // Update database in background
+            monitorService.updateMonitorStatus(
+              id,
+              result.status,
+              result.responseTime,
+              realUptime
+            ).catch(error => {
+              console.error('Error updating edited monitor status:', error);
+            });
+            
+            setMonitors(prev => prev.map(m => 
+              m.id === id 
+                ? { ...m, ...result, uptime: realUptime }
+                : m
+            ));
           } catch (error) {
             console.error('Error re-checking edited monitor:', error);
           }
