@@ -2,12 +2,12 @@ import { Monitor } from '../types/monitor';
 
 // Multiple API endpoints untuk HTTP/HTTPS dengan load balancing
 const HTTP_HTTPS_API_ENDPOINTS = [
-    "https://cek.apiii.workers.dev/status",
-    "http://cf1.apicek.workers.dev/status",
-    "https://cf2.apicek2.workers.dev/status",
-    "https://cf3.apicek3.workers.dev/status",
-    "https://cf4.apicek4.workers.dev/status"
-]
+    'https://cek.apiii.workers.dev/status',
+    'http://cf1.apicek.workers.dev/status',
+    'https://cf2.apicek2.workers.dev/status',
+    'https://cf3.apicek3.workers.dev/status',
+    'https://cf4.apicek4.workers.dev/status'
+];
 
 // API endpoint untuk ping (tetap menggunakan yang original)
 const PING_API_ENDPOINT = 'https://api.autsc.my.id/status';
