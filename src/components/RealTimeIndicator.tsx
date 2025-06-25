@@ -1,18 +1,20 @@
 import React from 'react';
-import { Wifi, WifiOff, Clock, Activity } from 'lucide-react';
+import { Wifi, WifiOff, Clock, Activity, RefreshCw } from 'lucide-react';
 
 interface RealTimeIndicatorProps {
   isMonitoring: boolean;
   lastUpdateTime: Date;
   activeChecks: Set<string>;
   totalMonitors: number;
+  onManualSync?: () => void;
 }
 
 const RealTimeIndicator: React.FC<RealTimeIndicatorProps> = ({
   isMonitoring,
   lastUpdateTime,
   activeChecks,
-  totalMonitors
+  totalMonitors,
+  onManualSync
 }) => {
   const formatLastUpdate = (date: Date) => {
     const now = new Date();
@@ -60,12 +62,23 @@ const RealTimeIndicator: React.FC<RealTimeIndicatorProps> = ({
             <Clock className="h-3 w-3" />
             <span>Update: {formatLastUpdate(lastUpdateTime)}</span>
           </div>
+
+          {onManualSync && (
+            <button
+              onClick={onManualSync}
+              className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 transition-colors"
+              title="Refresh manual"
+            >
+              <RefreshCw className="h-3 w-3" />
+              <span>Refresh</span>
+            </button>
+          )}
         </div>
       </div>
       
       {totalMonitors > 0 && (
         <div className="mt-2 text-xs text-gray-500">
-          Monitoring {totalMonitors} layanan secara real-time
+          Monitoring {totalMonitors} layanan • Cek otomatis setiap 1 menit
         </div>
       )}
     </div>
