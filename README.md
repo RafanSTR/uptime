@@ -1,6 +1,6 @@
 # UptimeWatch - Professional Uptime Monitoring
 
-Aplikasi monitoring uptime website yang modern dan profesional dengan setup manual yang mudah.
+Aplikasi monitoring uptime website yang modern dan profesional dengan setup manual yang mudah dan monitoring server-side 24/7.
 
 ## 🚀 Setup Manual - Step by Step
 
@@ -73,21 +73,35 @@ CREATE TABLE IF NOT EXISTS branding_settings (
   updated_at timestamptz DEFAULT now()
 );
 
--- 6. Enable Row Level Security
+-- 6. Create webhook_logs table for server monitoring
+CREATE TABLE IF NOT EXISTS webhook_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  webhook_data jsonb NOT NULL,
+  received_at timestamptz DEFAULT now(),
+  ip_address text,
+  user_agent text,
+  processed_at timestamptz,
+  status text DEFAULT 'received',
+  created_at timestamptz DEFAULT now()
+);
+
+-- 7. Enable Row Level Security
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE status_checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monitoring_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE branding_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
 
--- 7. Grant necessary permissions to anon role BEFORE creating RLS policies
+-- 8. Grant necessary permissions to anon role BEFORE creating RLS policies
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.monitors TO anon;
 GRANT SELECT, INSERT ON public.status_checks TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.monitoring_settings TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.branding_settings TO anon;
+GRANT ALL ON public.webhook_logs TO service_role;
 
--- 8. Create RLS Policies for admin_users
+-- 9. Create RLS Policies for admin_users
 DROP POLICY IF EXISTS "Allow SELECT for admin authentication" ON admin_users;
 CREATE POLICY "Allow SELECT for admin authentication"
   ON admin_users
@@ -118,7 +132,7 @@ CREATE POLICY "Allow anonymous UPDATE to admin_users"
   USING (true)
   WITH CHECK (true);
 
--- 9. Create RLS Policies for monitors
+-- 10. Create RLS Policies for monitors
 DROP POLICY IF EXISTS "Allow DELETE for monitor management" ON monitors;
 CREATE POLICY "Allow DELETE for monitor management"
   ON monitors
@@ -156,7 +170,7 @@ CREATE POLICY "Anyone can read monitors"
   TO anon, authenticated
   USING (true);
 
--- 10. Create RLS Policies for status_checks (uptime history)
+-- 11. Create RLS Policies for status_checks (uptime history)
 DROP POLICY IF EXISTS "Anyone can read status_checks" ON status_checks;
 CREATE POLICY "Anyone can read status_checks"
   ON status_checks
@@ -171,7 +185,7 @@ CREATE POLICY "Allow INSERT for status tracking"
   TO anon
   WITH CHECK (true);
 
--- 11. Create RLS Policies for monitoring_settings
+-- 12. Create RLS Policies for monitoring_settings
 DROP POLICY IF EXISTS "Allow INSERT for monitoring settings" ON monitoring_settings;
 CREATE POLICY "Allow INSERT for monitoring settings"
   ON monitoring_settings
@@ -194,7 +208,7 @@ CREATE POLICY "Allow UPDATE for monitoring settings"
   USING (true)
   WITH CHECK (true);
 
--- 12. Create RLS Policies for branding_settings
+-- 13. Create RLS Policies for branding_settings
 DROP POLICY IF EXISTS "Allow SELECT for branding settings" ON branding_settings;
 CREATE POLICY "Allow SELECT for branding settings"
   ON branding_settings
@@ -224,38 +238,100 @@ CREATE POLICY "Allow DELETE for branding settings"
   TO anon
   USING (true);
 
--- 13. Insert default admin user (username: admin, password: password)
+-- 14. Create RLS Policies for webhook_logs
+DROP POLICY IF EXISTS "Authenticated users can read webhook logs" ON webhook_logs;
+CREATE POLICY "Authenticated users can read webhook logs"
+  ON webhook_logs
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "Service can manage webhook logs" ON webhook_logs;
+CREATE POLICY "Service can manage webhook logs"
+  ON webhook_logs
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- 15. Insert default admin user (username: admin, password: password)
 INSERT INTO admin_users (username, password_hash)
 VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi')
 ON CONFLICT (username) DO NOTHING;
 
--- 14. Insert default monitoring settings
+-- 16. Insert default monitoring settings
 INSERT INTO monitoring_settings (global_check_interval, enable_global_interval)
 VALUES (5, false)
 ON CONFLICT DO NOTHING;
 
--- 15. Insert default branding settings
+-- 17. Insert default branding settings
 INSERT INTO branding_settings (app_name, logo_url, favicon_url, primary_color, secondary_color)
 VALUES ('UptimeWatch', '', '/vite.svg', '#2563eb', '#1e40af')
 ON CONFLICT DO NOTHING;
 
--- 16. Create indexes for better performance
+-- 18. Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_status_checks_monitor_id ON status_checks(monitor_id);
 CREATE INDEX IF NOT EXISTS idx_status_checks_checked_at ON status_checks(checked_at);
 CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status);
 CREATE INDEX IF NOT EXISTS idx_monitors_last_checked ON monitors(last_checked);
+CREATE INDEX IF NOT EXISTS idx_branding_settings_app_name ON branding_settings(app_name);
+CREATE INDEX IF NOT EXISTS webhook_logs_received_at_idx ON webhook_logs(received_at DESC);
+CREATE INDEX IF NOT EXISTS webhook_logs_status_idx ON webhook_logs(status);
 ```
 
 #### C. Jalankan SQL
 1. Klik **"Run"** untuk menjalankan semua SQL di atas
 2. Pastikan tidak ada error (semua harus sukses)
 
-### 3. Dapatkan Kredensial Supabase
+### 3. Setup Edge Functions untuk Server-Side Monitoring
+
+#### A. Buat Edge Functions di Supabase
+1. Di dashboard Supabase, buka **Edge Functions**
+2. Klik **"New Function"**
+3. Buat 3 functions dengan nama:
+   - `background-monitor`
+   - `webhook-monitor`
+   - `cleanup-old-data`
+
+#### B. Deploy Functions
+1. **background-monitor**: Copy code dari `supabase/functions/background-monitor/index.ts`
+2. **webhook-monitor**: Copy code dari `supabase/functions/webhook-monitor/index.ts`
+3. **cleanup-old-data**: Copy code dari `supabase/functions/cleanup-old-data/index.ts`
+4. Paste ke editor Supabase dan klik **"Deploy"** untuk setiap function
+
+#### C. Test Functions
+1. Klik **"Invoke"** di dashboard untuk test
+2. Pastikan semua functions berjalan tanpa error
+
+### 4. Setup GitHub Actions untuk Monitoring Otomatis 24/7
+
+#### A. Buat Repository GitHub
+1. Push project ke GitHub repository
+2. Pastikan file `.github/workflows/monitor.yml` sudah ada
+
+#### B. Setup GitHub Secrets
+1. Di GitHub repository, buka **Settings** → **Secrets and variables** → **Actions**
+2. Klik **"New repository secret"**
+3. Tambahkan secret:
+   - **Name**: `SUPABASE_WEBHOOK_URL`
+   - **Value**: `https://your-project-id.supabase.co/functions/v1/webhook-monitor`
+
+#### C. Aktifkan GitHub Actions
+1. Buka tab **Actions** di repository
+2. Klik **"I understand my workflows, go ahead and enable them"**
+3. Workflow akan berjalan otomatis setiap 5 menit
+
+#### D. Monitor GitHub Actions
+1. Buka tab **Actions** untuk melihat status monitoring
+2. Setiap 5 menit akan ada job baru yang berjalan
+3. Klik job untuk melihat log detail
+
+### 5. Dapatkan Kredensial Supabase
 1. Di dashboard Supabase, buka **Settings** → **API**
 2. Copy **Project URL** (contoh: `https://abc123.supabase.co`)
 3. Copy **anon public key** (key yang panjang dimulai dengan `eyJ...`)
 
-### 4. Setup Environment Variables
+### 6. Setup Environment Variables
 
 #### Untuk Development Local:
 Buat file `.env` di root project:
@@ -265,7 +341,7 @@ VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
-### 5. Deploy ke Vercel
+### 7. Deploy ke Vercel
 
 #### A. Persiapan
 1. Push project ke GitHub repository
@@ -288,7 +364,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 3. Tambahkan domain custom Anda
 4. Ikuti instruksi untuk setup DNS
 
-### 6. Deploy ke Netlify
+### 8. Deploy ke Netlify
 
 #### A. Build Project Local
 ```bash
@@ -331,7 +407,7 @@ npm run build
 3. Klik **"Add custom domain"**
 4. Ikuti instruksi untuk setup DNS
 
-### 7. Test Aplikasi
+### 9. Test Aplikasi
 1. Buka aplikasi (local: `http://localhost:5173` atau URL production)
 2. Klik **Login** di navigation
 3. Login dengan:
@@ -379,11 +455,19 @@ GRANT SELECT, INSERT ON public.status_checks TO anon;
 ```
 3. Restart aplikasi setelah menjalankan SQL
 
-### ❌ Branding Tidak Sync Antar Browser
+### ❌ GitHub Actions Tidak Berjalan
 **Solusi:**
-1. Pastikan tabel `branding_settings` sudah dibuat dengan SQL setup di atas
-2. Cek apakah ada error di console browser
-3. Refresh aplikasi setelah mengubah branding settings
+1. Pastikan secret `SUPABASE_WEBHOOK_URL` sudah diset dengan benar
+2. Format URL: `https://your-project-id.supabase.co/functions/v1/webhook-monitor`
+3. Cek tab Actions untuk melihat error logs
+4. Pastikan Edge Functions sudah di-deploy dengan benar
+
+### ❌ Server Monitoring Tidak Berjalan
+**Solusi:**
+1. Test Edge Functions di Supabase Dashboard
+2. Pastikan webhook URL benar di GitHub secrets
+3. Cek logs di tab Actions GitHub
+4. Verifikasi database permissions
 
 ## 📋 Default Credentials
 
@@ -400,6 +484,12 @@ Setelah setup database, gunakan kredensial berikut:
 - Pengecekan otomatis sesuai interval
 - Update status real-time
 - Visual indicator saat monitoring aktif
+
+### ✅ Server-Side Monitoring 24/7
+- **GitHub Actions**: Monitoring berjalan di server GitHub setiap 5 menit
+- **Edge Functions**: Processing di server Supabase
+- **Webhook Logging**: Track semua monitoring activities
+- **Auto-Cleanup**: Maintenance database otomatis
 
 ### ✅ Admin Dashboard
 - Kelola semua monitor
@@ -428,9 +518,10 @@ Setelah setup database, gunakan kredensial berikut:
 ## 🛠️ Teknologi
 
 - **Frontend**: React + TypeScript + Tailwind CSS
-- **Backend**: Supabase (PostgreSQL + Real-time)
+- **Backend**: Supabase (PostgreSQL + Real-time + Edge Functions)
 - **Monitoring API**: External uptime checking service
 - **Authentication**: Custom admin system dengan bcrypt
+- **Server Monitoring**: GitHub Actions + Supabase Edge Functions
 - **Deployment**: Vercel/Netlify optimized
 
 ## 📊 Monitoring Methods
@@ -479,6 +570,29 @@ Setelah setup database, gunakan kredensial berikut:
 - ✅ **Colors**: Sesuaikan warna primer dan sekunder
 - ✅ **Reset**: Kembalikan ke pengaturan default
 
+## 🚀 Server-Side Monitoring Architecture
+
+### **GitHub Actions Workflow**
+```yaml
+name: Website Monitoring
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 minutes
+```
+
+### **Edge Functions Flow**
+1. **GitHub Actions** → Trigger webhook setiap 5 menit
+2. **webhook-monitor** → Log request dan trigger background monitor
+3. **background-monitor** → Cek semua website dan update database
+4. **cleanup-old-data** → Maintenance database (opsional)
+
+### **Monitoring Process**
+1. **Fetch Monitors**: Ambil semua monitor dari database
+2. **Check Intervals**: Filter monitor yang perlu dicek
+3. **API Calls**: Panggil external API untuk cek status
+4. **Update Database**: Simpan hasil ke `status_checks` dan `monitors`
+5. **Calculate Uptime**: Hitung uptime berdasarkan history 30 hari
+
 ## 🔒 Keamanan
 
 - Environment variables untuk kredensial
@@ -486,6 +600,7 @@ Setelah setup database, gunakan kredensial berikut:
 - Password hashing dengan bcrypt
 - CORS protection
 - Input validation dan sanitization
+- Webhook logging untuk audit trail
 
 ## 📞 Support
 
@@ -494,19 +609,23 @@ Untuk bantuan teknis:
 2. Periksa network tab untuk failed requests
 3. Pastikan environment variables sudah benar
 4. Cek status Supabase di dashboard mereka
+5. Monitor GitHub Actions di tab Actions
+6. Cek Edge Functions logs di Supabase Dashboard
 
 ## 🔗 Links Penting
 
 - [Supabase Dashboard](https://supabase.com/dashboard)
 - [Vercel Dashboard](https://vercel.com/dashboard)
 - [Netlify Dashboard](https://app.netlify.com)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
 
 ---
 
-**Setup manual yang mudah, monitoring yang powerful!** 🚀
+**Setup manual yang mudah, monitoring server-side 24/7 yang powerful!** 🚀
 
-### 🎯 Keunggulan Setup Manual:
+### 🎯 Keunggulan Setup Ini:
 
+✅ **Server-Side Monitoring** - Berjalan 24/7 di server GitHub  
 ✅ **Kontrol Penuh** - Anda tahu persis apa yang dibuat  
 ✅ **Debugging Mudah** - Jika ada masalah, mudah dilacak  
 ✅ **Production Ready** - Tested dan optimized  
@@ -514,4 +633,8 @@ Untuk bantuan teknis:
 ✅ **Zero Dependencies** - Tidak butuh tools tambahan  
 ✅ **Clear Documentation** - Panduan step-by-step yang jelas  
 ✅ **Accurate Uptime** - Tracking berbasis history yang akurat  
-✅ **Cross-Browser Branding** - Branding sync di semua browser 🆕
+✅ **Cross-Browser Branding** - Branding sync di semua browser  
+✅ **GitHub Actions Integration** - Monitoring otomatis gratis  
+✅ **Edge Functions** - Processing cepat di server Supabase  
+✅ **Webhook Logging** - Audit trail lengkap  
+✅ **Auto Cleanup** - Maintenance database otomatis
