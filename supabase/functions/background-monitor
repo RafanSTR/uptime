@@ -1,90 +1,72 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-
-interface Monitor {
-  id: string;
-  name: string;
-  url: string;
-  method: 'http' | 'ping';
-  check_interval: number;
-  last_checked: string;
-  status: 'up' | 'down' | 'checking';
-}
-
-interface CheckResult {
-  status: 'up' | 'down';
-  responseTime: number;
-}
-
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-}
-
-serve(async (req) => {
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+};
+serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', {
+      headers: corsHeaders
+    });
   }
-
   try {
     console.log('🚀 Starting server-side background monitoring...');
-
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // Get all monitors
-    const { data: monitors, error: monitorsError } = await supabase
-      .from('monitors')
-      .select('*')
-      .in('status', ['up', 'down', 'checking']);
-
+    const { data: monitors, error: monitorsError } = await supabase.from('monitors').select('*').in('status', [
+      'up',
+      'down',
+      'checking'
+    ]);
     if (monitorsError) {
       console.error('❌ Error fetching monitors:', monitorsError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch monitors', details: monitorsError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({
+        error: 'Failed to fetch monitors',
+        details: monitorsError.message
+      }), {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
     }
-
     if (!monitors || monitors.length === 0) {
       console.log('ℹ️ No monitors found to check');
-      return new Response(
-        JSON.stringify({ 
-          success: true,
-          message: 'No monitors to check', 
-          checked: 0,
-          timestamp: new Date().toISOString()
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'No monitors to check',
+        checked: 0,
+        timestamp: new Date().toISOString()
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
     }
-
     console.log(`📊 Found ${monitors.length} monitors in database`);
-
     // Get monitoring settings
-    const { data: settings } = await supabase
-      .from('monitoring_settings')
-      .select('*')
-      .single();
-
+    const { data: settings } = await supabase.from('monitoring_settings').select('*').single();
     const globalInterval = settings?.enable_global_interval ? settings.global_check_interval : null;
-    console.log('⚙️ Monitoring settings:', { globalInterval, enableGlobal: settings?.enable_global_interval });
-
+    console.log('⚙️ Monitoring settings:', {
+      globalInterval,
+      enableGlobal: settings?.enable_global_interval
+    });
     // Filter monitors that need checking
     const now = new Date();
-    const monitorsToCheck = monitors.filter((monitor: Monitor) => {
+    const monitorsToCheck = monitors.filter((monitor)=>{
       const lastChecked = new Date(monitor.last_checked);
       const interval = globalInterval || monitor.check_interval || 5;
-      const nextCheckTime = new Date(lastChecked.getTime() + (interval * 60 * 1000));
-      
+      const nextCheckTime = new Date(lastChecked.getTime() + interval * 60 * 1000);
       const needsCheck = now >= nextCheckTime;
       const timeSinceLastCheck = Math.round((now.getTime() - lastChecked.getTime()) / 60000);
-      
       console.log(`📊 Monitor "${monitor.name}":`, {
         lastChecked: lastChecked.toLocaleString(),
         timeSinceLastCheck: `${timeSinceLastCheck}m ago`,
@@ -92,71 +74,54 @@ serve(async (req) => {
         nextCheck: nextCheckTime.toLocaleString(),
         needsCheck: needsCheck ? '✅ YES' : '❌ NO'
       });
-      
       return needsCheck;
     });
-
     console.log(`🎯 Found ${monitorsToCheck.length} monitors that need checking`);
-
     if (monitorsToCheck.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: true,
-          message: 'No monitors need checking at this time', 
-          checked: 0,
-          totalMonitors: monitors.length,
-          timestamp: new Date().toISOString()
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'No monitors need checking at this time',
+        checked: 0,
+        totalMonitors: monitors.length,
+        timestamp: new Date().toISOString()
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
     }
-
     // Check each monitor
     const results = [];
     let successCount = 0;
     let errorCount = 0;
-    
-    for (const monitor of monitorsToCheck) {
+    for (const monitor of monitorsToCheck){
       try {
         console.log(`🔄 [${results.length + 1}/${monitorsToCheck.length}] Checking: ${monitor.name} (${monitor.url})`);
-        
         // Update status to checking
-        await supabase
-          .from('monitors')
-          .update({ 
-            status: 'checking',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', monitor.id);
-
+        await supabase.from('monitors').update({
+          status: 'checking',
+          updated_at: new Date().toISOString()
+        }).eq('id', monitor.id);
         // Perform the actual check
         const checkResult = await performCheck(monitor.url, monitor.method);
-        
         // Save status check to history
-        await supabase
-          .from('status_checks')
-          .insert({
-            monitor_id: monitor.id,
-            status: checkResult.status,
-            response_time: checkResult.responseTime,
-            checked_at: new Date().toISOString()
-          });
-
+        await supabase.from('status_checks').insert({
+          monitor_id: monitor.id,
+          status: checkResult.status,
+          response_time: checkResult.responseTime,
+          checked_at: new Date().toISOString()
+        });
         // Calculate uptime from history
         const uptime = await calculateUptime(supabase, monitor.id);
-
         // Update monitor with results
-        await supabase
-          .from('monitors')
-          .update({
-            status: checkResult.status,
-            response_time: checkResult.responseTime,
-            uptime: uptime,
-            last_checked: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', monitor.id);
-
+        await supabase.from('monitors').update({
+          status: checkResult.status,
+          response_time: checkResult.responseTime,
+          uptime: uptime,
+          last_checked: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }).eq('id', monitor.id);
         results.push({
           id: monitor.id,
           name: monitor.name,
@@ -165,38 +130,27 @@ serve(async (req) => {
           uptime: uptime,
           success: true
         });
-
         successCount++;
         console.log(`✅ [${results.length}/${monitorsToCheck.length}] ${monitor.name}: ${checkResult.status} (${checkResult.responseTime}ms, ${uptime}% uptime)`);
-
       } catch (error) {
         console.error(`❌ Error checking monitor ${monitor.name}:`, error);
-        
         // Save failed check
-        await supabase
-          .from('status_checks')
-          .insert({
-            monitor_id: monitor.id,
-            status: 'down',
-            response_time: 0,
-            checked_at: new Date().toISOString()
-          });
-
+        await supabase.from('status_checks').insert({
+          monitor_id: monitor.id,
+          status: 'down',
+          response_time: 0,
+          checked_at: new Date().toISOString()
+        });
         // Calculate uptime after failed check
         const uptime = await calculateUptime(supabase, monitor.id);
-
         // Update monitor as down
-        await supabase
-          .from('monitors')
-          .update({
-            status: 'down',
-            response_time: 0,
-            uptime: uptime,
-            last_checked: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', monitor.id);
-
+        await supabase.from('monitors').update({
+          status: 'down',
+          response_time: 0,
+          uptime: uptime,
+          last_checked: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }).eq('id', monitor.id);
         results.push({
           id: monitor.id,
           name: monitor.name,
@@ -206,68 +160,63 @@ serve(async (req) => {
           success: false,
           error: error.message
         });
-
         errorCount++;
       }
     }
-
     console.log(`✅ Server-side monitoring completed!`, {
       totalChecked: results.length,
       successful: successCount,
       errors: errorCount,
       timestamp: new Date().toISOString()
     });
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Server-side monitoring completed successfully',
-        checked: results.length,
-        successful: successCount,
-        errors: errorCount,
-        totalMonitors: monitors.length,
-        results: results,
-        timestamp: new Date().toISOString(),
-        source: 'server-side'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Server-side monitoring completed successfully',
+      checked: results.length,
+      successful: successCount,
+      errors: errorCount,
+      totalMonitors: monitors.length,
+      results: results,
+      timestamp: new Date().toISOString(),
+      source: 'server-side'
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
   } catch (error) {
     console.error('❌ Server-side monitoring error:', error);
-    return new Response(
-      JSON.stringify({ 
-        success: false,
-        error: 'Server-side monitoring failed', 
-        details: error.message,
-        timestamp: new Date().toISOString()
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Server-side monitoring failed',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
   }
 });
-
-async function performCheck(url: string, method: 'http' | 'ping'): Promise<CheckResult> {
+async function performCheck(url, method) {
   const API_ENDPOINT = 'https://api.autsc.my.id/status';
   const formattedUrl = formatUrlForApi(url, method);
   const maxRetries = 2;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for(let attempt = 1; attempt <= maxRetries; attempt++){
     try {
       console.log(`🔄 Attempt ${attempt}/${maxRetries} - Checking ${formattedUrl} using ${method} method`);
-      
       // Determine API method
       let apiMethod = method;
       if (method === 'http') {
         apiMethod = formattedUrl.startsWith('https://') ? 'https' : 'http';
       }
-      
       const apiUrl = `${API_ENDPOINT}?domain=${encodeURIComponent(formattedUrl)}&method=${apiMethod}`;
       console.log(`📡 API URL: ${apiUrl}`);
-      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
+      const timeoutId = setTimeout(()=>controller.abort(), 15000); // 15 second timeout
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
@@ -276,52 +225,41 @@ async function performCheck(url: string, method: 'http' | 'ping'): Promise<Check
         },
         signal: controller.signal
       });
-
       clearTimeout(timeoutId);
-
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
-
       const data = await response.json();
       console.log(`📊 API response for ${formattedUrl}:`, data);
-      
       const isUp = data.status === 'online';
       let responseTime = 0;
-      
       if (data.latency_ms !== undefined && data.latency_ms !== null) {
         const rawLatency = Number(data.latency_ms);
-        if (rawLatency > 0 && rawLatency < 30000) { // Max 30 seconds
+        if (rawLatency > 0 && rawLatency < 30000) {
           responseTime = Math.round(rawLatency);
         }
       }
-
       console.log(`✅ Check successful for ${formattedUrl}: ${isUp ? 'up' : 'down'} (${responseTime}ms)`);
-      
       return {
         status: isUp ? 'up' : 'down',
         responseTime: responseTime
       };
-
     } catch (error) {
       console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${formattedUrl}:`, error);
-      
       if (attempt < maxRetries) {
         console.log(`🔄 Retrying... (${attempt + 1}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        await new Promise((resolve)=>setTimeout(resolve, 2000)); // Wait 2 seconds before retry
         continue;
       }
     }
   }
-  
   console.error(`❌ All ${maxRetries} attempts failed for ${formattedUrl}`);
   return {
     status: 'down',
     responseTime: 0
   };
 }
-
-function formatUrlForApi(url: string, method: 'http' | 'ping'): string {
+function formatUrlForApi(url, method) {
   if (method === 'ping') {
     // Extract hostname for ping
     try {
@@ -329,7 +267,7 @@ function formatUrlForApi(url: string, method: 'http' | 'ping'): string {
         return new URL(url).hostname;
       }
       return url;
-    } catch {
+    } catch  {
       return url;
     }
   } else {
@@ -340,26 +278,17 @@ function formatUrlForApi(url: string, method: 'http' | 'ping'): string {
     return url;
   }
 }
-
-async function calculateUptime(supabase: any, monitorId: string): Promise<number> {
+async function calculateUptime(supabase, monitorId) {
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const { data: statusChecks, error } = await supabase
-      .from('status_checks')
-      .select('status')
-      .eq('monitor_id', monitorId)
-      .gte('checked_at', thirtyDaysAgo.toISOString());
-
+    const { data: statusChecks, error } = await supabase.from('status_checks').select('status').eq('monitor_id', monitorId).gte('checked_at', thirtyDaysAgo.toISOString());
     if (error || !statusChecks || statusChecks.length === 0) {
       return 100; // Default for new monitors
     }
-
-    const upChecks = statusChecks.filter((check: any) => check.status === 'up').length;
+    const upChecks = statusChecks.filter((check)=>check.status === 'up').length;
     const totalChecks = statusChecks.length;
-    
-    return Math.round((upChecks / totalChecks) * 100);
+    return Math.round(upChecks / totalChecks * 100);
   } catch (error) {
     console.error('Error calculating uptime:', error);
     return 100;
